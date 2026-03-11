@@ -57,6 +57,7 @@ class _BlockRaiseInspector(ast.NodeVisitor):
         self.exception_types: List[str] = []
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        # We don't want to descend into nested functions when looking for raises in a specific block
         return
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
@@ -94,6 +95,7 @@ class BodyVisitor(ast.NodeVisitor):
         self._conditional_depth = 0
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        # Nested functions are separate units
         return
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
@@ -190,9 +192,12 @@ class FuncExtractor(ast.NodeVisitor):
         return
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        return
+        self._process_function(node, is_async=True)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._process_function(node, is_async=False)
+
+    def _process_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef, is_async: bool) -> None:
         if node.name.startswith("__"):
             return
 
@@ -236,6 +241,7 @@ class FuncExtractor(ast.NodeVisitor):
             "exception_types": list(dict.fromkeys(body_visitor.exception_types)),
             "unsupported_reason": unsupported_reason,
             "docstring": ast.get_docstring(node),
+            "is_async": is_async,
         }
         self.functions.append(func_info)
 

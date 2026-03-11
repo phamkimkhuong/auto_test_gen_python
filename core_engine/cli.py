@@ -2,10 +2,47 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import sys
-from typing import List
+import webbrowser
+from typing import Any, Dict, List
+
+try:
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.progress import Progress
+    from rich.table import Table
+
+    HAS_RICH = True
+except ImportError:
+    HAS_RICH = False
 
 from .code_generator import generate_test_file
+
+console = Console() if HAS_RICH else None
+
+
+def _print_rich_summary(summary: Dict[str, Any], dry_run: bool) -> None:
+    if not HAS_RICH:
+        print("\n--- Auto Test Generator Summary ---")
+        for k, v in summary.items():
+            print(f"{k.replace('_', ' ').capitalize():<24}: {v}")
+        print("-----------------------------------")
+        return
+
+    table = Table(title="[bold blue]Auto Test Generator Summary[/bold blue]")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="magenta", justify="right")
+
+    table.add_row("Scanned files", str(summary["files"]))
+    table.add_row("Supported functions", str(summary["supported_functions"]))
+    table.add_row("Skipped functions", str(summary["skipped_functions"]))
+    table.add_row("Generated test cases", str(summary["generated_tests"]))
+    if not dry_run:
+        table.add_row("Generated test files", str(summary["generated_files"]))
+    table.add_row("Syntax-error files", str(summary["syntax_errors"]))
+
+    console.print(table)
 
 
 def _collect_python_files(path: str) -> List[str]:
@@ -48,6 +85,17 @@ def main() -> None:
         action="store_true",
         help="Print per-file processing details.",
     )
+    parser.add_argument(
+        "--run",
+        action="store_true",
+        help="Run pytest immediately after generation.",
+    )
+    parser.add_argument(
+        "--report",
+        choices=["term", "html", "xml"],
+        default="term",
+        help="Type of coverage report to generate if --run is used.",
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.input):
@@ -68,53 +116,100 @@ def main() -> None:
         "generated_tests": 0,
     }
 
-    for file_path in files:
-        if args.verbose:
-            mode = "DRY-RUN" if args.dry_run else "GENERATE"
-            print(f"[{mode}] {file_path}")
-
-        result = generate_test_file(
-            file_path,
-            args.out,
-            module_path=args.module,
-            dry_run=args.dry_run,
-        )
-
-        functions = result.get("functions", [])
-        skipped_functions = result.get("skipped_functions", [])
-        summary["supported_functions"] += max(0, len(functions) - len(skipped_functions))
-        summary["skipped_functions"] += len(skipped_functions)
-        summary["generated_tests"] += result.get("generated_tests", 0)
-
-        if result["status"] == "syntax_error":
-            summary["syntax_errors"] += 1
-            print(f"  - Skipped syntax error: {result['message']}")
-            continue
-
-        if result["status"] == "generated":
-            summary["generated_files"] += 1
+    if HAS_RICH and not args.dry_run:
+        with Progress() as progress:
+            task = progress.add_task("[green]Generating tests...", total=len(files))
+            for file_path in files:
+                result = generate_test_file(
+                    file_path,
+                    args.out,
+                    module_path=args.module,
+                    dry_run=args.dry_run,
+                )
+                _update_summary(summary, result, args.verbose)
+                progress.update(task, advance=1)
+    else:
+        for file_path in files:
             if args.verbose:
-                print(f"  - Wrote: {result['output_file']} ({result['generated_tests']} tests)")
+                mode = "DRY-RUN" if args.dry_run else "GENERATE"
+                print(f"[{mode}] {file_path}")
 
-        if args.dry_run:
-            for func in functions:
-                print(f"  - {func['name']}({', '.join(a['name'] for a in func['args'])}) -> {func['return_type']}")
-                if func.get("unsupported_reason"):
-                    print(f"      unsupported: {func['unsupported_reason']}")
-                else:
-                    print(f"      branches: {func.get('branches', [])}")
-                    print(f"      raises: {func.get('raises', False)} / unconditional_raise: {func.get('unconditional_raise', False)}")
+            result = generate_test_file(
+                file_path,
+                args.out,
+                module_path=args.module,
+                dry_run=args.dry_run,
+            )
+            _update_summary(summary, result, args.verbose)
+            if args.dry_run:
+                _print_dry_run_details(result)
 
-    print("\n--- Auto Test Generator Summary ---")
-    print(f"Scanned files           : {summary['files']}")
-    print(f"Supported functions     : {summary['supported_functions']}")
-    print(f"Skipped functions       : {summary['skipped_functions']}")
-    print(f"Generated test cases    : {summary['generated_tests']}")
-    if not args.dry_run:
-        print(f"Generated test files    : {summary['generated_files']}")
-    print(f"Syntax-error files      : {summary['syntax_errors']}")
-    print("-----------------------------------")
+    _print_rich_summary(summary, args.dry_run)
+
+    if args.run and not args.dry_run:
+        _run_pytest(args.out, args.module, args.report)
+
+
+def _update_summary(summary: Dict[str, Any], result: Dict[str, Any], verbose: bool) -> None:
+    functions = result.get("functions", [])
+    skipped_functions = result.get("skipped_functions", [])
+    summary["supported_functions"] += max(0, len(functions) - len(skipped_functions))
+    summary["skipped_functions"] += len(skipped_functions)
+    summary["generated_tests"] += result.get("generated_tests", 0)
+
+    if result["status"] == "syntax_error":
+        summary["syntax_errors"] += 1
+        return
+
+    if result["status"] == "generated":
+        summary["generated_files"] += 1
+
+
+def _print_dry_run_details(result: Dict[str, Any]) -> None:
+    functions = result.get("functions", [])
+    for func in functions:
+        name_str = f"{func['name']}({', '.join(a['name'] for a in func['args'])}) -> {func['return_type']}"
+        if func.get("is_async"):
+            name_str = f"async {name_str}"
+        print(f"  - {name_str}")
+        if func.get("unsupported_reason"):
+            print(f"      unsupported: {func['unsupported_reason']}")
+        else:
+            print(f"      branches: {func.get('branches', [])}")
+            print(
+                f"      raises: {func.get('raises', False)} / unconditional_raise: {func.get('unconditional_raise', False)}"
+            )
+
+
+def _run_pytest(test_dir: str, module_path: str | None, report_type: str) -> None:
+    if HAS_RICH:
+        console.print(Panel(f"[bold green]Running pytest on {test_dir}...[/bold green]"))
+
+    cmd = [sys.executable, "-m", "pytest", test_dir]
+    if module_path:
+        cmd.extend([f"--cov={module_path}"])
+        if report_type == "html":
+            cmd.extend(["--cov-report=html:htmlcov"])
+        elif report_type == "xml":
+            cmd.extend(["--cov-report=xml:coverage.xml"])
+        else:
+            cmd.extend(["--cov-report=term-missing"])
+
+    try:
+        subprocess.run(cmd, check=False)
+        if report_type == "html":
+            html_index = os.path.abspath("htmlcov/index.html")
+            if os.path.exists(html_index):
+                if HAS_RICH:
+                    console.print(f"[bold yellow]Opening HTML report:[/bold yellow] {html_index}")
+                # Using abspath directly is often more reliable on Windows
+                webbrowser.open(html_index)
+    except Exception as e:
+        if HAS_RICH:
+            console.print(f"[bold red]Error running pytest:[/bold red] {e}")
+        else:
+            print(f"Error running pytest: {e}")
 
 
 if __name__ == "__main__":
-    main()
+    main()

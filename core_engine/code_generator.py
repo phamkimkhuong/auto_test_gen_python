@@ -200,17 +200,22 @@ def generate_test_file(
         name = func["name"]
         args = func["args"]
         return_type = func["return_type"]
+        is_async = func.get("is_async", False)
         assert_line = _build_assertion("result", return_type)
+        prefix = "await " if is_async else ""
+        def_prefix = "async def" if is_async else "def"
+        async_mark = ["@pytest.mark.asyncio"] if is_async else []
 
         if not args:
             call = f"{name}()"
             if func.get("unconditional_raise"):
                 exc_name = _infer_exception_name(func)
                 if exc_name:
+                    lines.extend(async_mark)
                     lines.extend([
-                        f"def test_{name}_raises():",
+                        f"{def_prefix} test_{name}_raises():",
                         f"    with pytest.raises({exc_name}):",
-                        f"        {call}",
+                        f"        {prefix}{call}",
                         "",
                     ])
                     generated_tests += 1
@@ -224,8 +229,9 @@ def generate_test_file(
                     generated_tests += 1
                 continue
 
-            lines.append(f"def test_{name}_smoke():")
-            lines.append(f"    result = {call}")
+            lines.extend(async_mark)
+            lines.append(f"{def_prefix} test_{name}_smoke():")
+            lines.append(f"    result = {prefix}{call}")
             if assert_line:
                 lines.append(f"    {assert_line}")
             else:
@@ -240,10 +246,11 @@ def generate_test_file(
         param_names = ", ".join(arg["name"] for arg in args)
         call_expr = _call_expression(name, args, [arg["name"] for arg in args])
 
-        lines.append(f"def test_{name}_smoke():")
+        lines.extend(async_mark)
+        lines.append(f"{def_prefix} test_{name}_smoke():")
         for spec, value in zip(args, smoke_values):
             lines.append(f"    {spec['name']} = {repr(value)}")
-        lines.append(f"    result = {call_expr}")
+        lines.append(f"    result = {prefix}{call_expr}")
         if assert_line:
             lines.append(f"    {assert_line}")
         else:
@@ -254,8 +261,9 @@ def generate_test_file(
         if len(boundary_cases) > 1:
             serialized_cases = [tuple(case) if len(case) > 1 else case[0] for case in boundary_cases]
             lines.append(f"@pytest.mark.parametrize('{param_names}', {serialized_cases!r})")
-            lines.append(f"def test_{name}_boundary({param_names}):")
-            lines.append(f"    result = {call_expr}")
+            lines.extend(async_mark)
+            lines.append(f"{def_prefix} test_{name}_boundary({param_names}):")
+            lines.append(f"    result = {prefix}{call_expr}")
             if assert_line:
                 lines.append(f"    {assert_line}")
             else:
@@ -268,9 +276,10 @@ def generate_test_file(
         if raise_cases and exc_name:
             serialized_raise_cases = [tuple(case) if len(case) > 1 else case[0] for case in raise_cases]
             lines.append(f"@pytest.mark.parametrize('{param_names}', {serialized_raise_cases!r})")
-            lines.append(f"def test_{name}_raises({param_names}):")
+            lines.extend(async_mark)
+            lines.append(f"{def_prefix} test_{name}_raises({param_names}):")
             lines.append(f"    with pytest.raises({exc_name}):")
-            lines.append(f"        {call_expr}")
+            lines.append(f"        {prefix}{call_expr}")
             lines.append("")
             generated_tests += len(raise_cases)
         elif func.get("raises"):

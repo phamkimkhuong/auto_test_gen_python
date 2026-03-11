@@ -191,14 +191,13 @@ Các file demo được thiết kế để:
 ## 7. Phạm vi hỗ trợ
 
 ### Hỗ trợ tốt
-- **Top-level synchronous functions**.
+- **Top-level functions**: Cả đồng bộ (`def`) và bất đồng bộ (`async def`).
 - **Type hints cơ bản**: `int`, `float`, `str`, `bool`, `list`, `dict`.
 - **Điều kiện `if` đơn giản** với literal (số, chuỗi, bool).
 - **Raise-path cơ bản**: Nhận diện được exception type khi gặp lệnh `raise`.
-- **Tự động sinh bộ tests**: Bao gồm smoke test và boundary tests (sử dụng `pytest.mark.parametrize`).
+- **Tự động sinh bộ tests**: Bao gồm smoke test và boundary tests (sử dụng `pytest.mark.parametrize` và `@pytest.mark.asyncio`).
 
 ### Ngoài phạm vi (Hoặc hỗ trợ hạn chế)
-- **Async functions**: `async def`.
 - **Class methods**: Các phương thức trong class (`self`).
 - **Nested functions**: Hàm lồng nhau.
 - **Framework-specific code**: Mã nguồn phụ thuộc vào Django, Flask, FastAPI.
@@ -210,66 +209,62 @@ Các file demo được thiết kế để:
 
 ## 8. Cài đặt
 
-Yêu cầu khuyến nghị:
-- **Python 3.10+**
-- **pytest**
-- **pytest-cov**
+Yêu cầu: **Python 3.10+**
 
-Cài đặt dependencies:
+### Cách 1: Cài đặt để phát triển (Khuyên dùng)
+```bash
+git clone https://github.com/your-username/auto_test_gen_python.git
+cd auto_test_gen_python
+pip install .
+```
+
+### Cách 2: Cài đặt dependencies thủ công
 ```bash
 pip install -r requirements.txt
 ```
 
 ---
 
-## 9. Cách sử dụng
+Sau khi cài đặt bằng `pip install .`, bạn có thể dùng lệnh `auto-test-gen` ở bất cứ đâu.
 
-### 9.1. Dry-run (Chỉ parse, không sinh file test)
+### 9.1. Lệnh cơ bản (Sinh test & Chạy ngay)
 ```bash
-python -m core_engine.cli demo_inputs --dry-run -v
+auto-test-gen demo_inputs --out tests_output --module demo_inputs --run
 ```
 
-### 9.2. Sinh test cho toàn bộ thư mục demo
+### 9.2. Xuất báo cáo HTML và Xem độ phủ
 ```bash
-python -m core_engine.cli demo_inputs --out tests_output --module demo_inputs -v
+auto-test-gen demo_inputs --out tests_output --module demo_inputs --run --report html
 ```
 
-### 9.3. Chạy test đã sinh
+### 9.3. Lệnh dự phòng (Nếu không cài package)
 ```bash
-pytest tests_output/
-```
-
-### 9.4. Đo coverage
-```bash
-pytest tests_output/ --cov=demo_inputs --cov-report=term-missing
+# Sử dụng module path trực tiếp
+python -m core_engine.cli demo_inputs --out tests_output --module demo_inputs --run
 ```
 
 ---
 
-## 10. Ví dụ output dry-run
+## 10. Các tính năng nâng cao (Milestone 3)
 
-Khi thực hiện lệnh `dry-run`, công cụ sẽ in ra metadata trích xuất được mà không ghi file:
+### Hỗ trợ Async/Await
+Công cụ đã có thể xử lý các hàm `async def`. Nó sẽ tự động:
+- Thêm dấu `@pytest.mark.asyncio`.
+- Sử dụng từ khóa `await` khi gọi hàm trong code test.
+- Đảm bảo môi trường chạy async thông qua `pytest-asyncio`.
 
-```text
-[DRY-RUN] demo_inputs/condition_utils.py
-  - check_status(code) -> str
-      branches: [
-        {'arg': 'code', 'op': 'Eq', 'value': 200, 'source': 'code == 200', 'raise_when': None, 'exception_type': None},
-        {'arg': 'code', 'op': 'Eq', 'value': 404, 'source': 'code == 404', 'raise_when': None, 'exception_type': None}
-      ]
-      raises: False / unconditional_raise: False
+###  Giao diện Rich CLI
+- **Progress Bar**: Hiển thị tiến trình quét file thời gian thực.
+- **Summary Table**: Bảng tổng kết kết quả đẹp mắt với màu sắc phân biệt.
+- **Auto-run**: Tích hợp luồng chạy kiểm thử ngay sau khi sinh mã.
 
-[DRY-RUN] demo_inputs/math_utils.py
-  - add(a, b) -> int
-      branches: []
-      raises: False / unconditional_raise: False
-  - divide(a, b) -> float
-      branches: [
-        {'arg': 'b', 'op': 'Eq', 'value': 0, 'source': 'b == 0', 'raise_when': None, 'exception_type': None}
-      ]
-      raises: False / unconditional_raise: False
+### Đóng gói Thư viện
+Bạn có thể cài đặt công cụ như một thư viện CLI hệ thống:
+```bash
+pip install .
+# Sau đó chạy lệnh trực tiếp:
+auto-test-gen demo_inputs --run
 ```
-
 ---
 
 ## 11. Ví dụ generated test

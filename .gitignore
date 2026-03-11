@@ -18,3 +18,11 @@ ENV/
 tests_output/
 *.log
 .DS_Store
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
