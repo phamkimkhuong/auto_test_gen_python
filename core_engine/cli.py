@@ -336,7 +336,8 @@ def _run_pytest(test_dir: str, module_path: str | None, report_type: str, input_
     if HAS_RICH:
         console.print(Panel(f"[bold green]Running pytest on {test_dir}...[/bold green]"))
 
-    json_report = "report_data.json"
+    # Use absolute path for reliability in CI
+    json_report = os.path.abspath("report_data.json")
     cmd = [sys.executable, "-m", "pytest", test_dir, f"--json-report", f"--json-report-file={json_report}"]
     
     if module_path:
@@ -355,14 +356,26 @@ def _run_pytest(test_dir: str, module_path: str | None, report_type: str, input_
     env["PYTHONPATH"] = f"{additional_path}{os.pathsep}{current_pp}" if current_pp else additional_path
 
     try:
-        subprocess.run(cmd, check=False, env=env)
+        # Run pytest
+        result = subprocess.run(cmd, check=False, env=env)
         
+        # Check if JSON report was actually generated
+        if not os.path.exists(json_report):
+            error_msg = f"Pytest failed to generate JSON report at {json_report}"
+            if HAS_RICH:
+                console.print(f"[bold red]{error_msg}[/bold red]")
+            else:
+                print(error_msg)
+            sys.exit(1)
+
         # Simple Report Generation
         dashboard_path = os.path.abspath("test_dashboard.html")
         _generate_test_dashboard(json_report, dashboard_path)
         
         if HAS_RICH:
             console.print(f"[bold cyan]Report generated:[/bold cyan] {dashboard_path}")
+        else:
+            print(f"Report generated: {dashboard_path}")
         
         # Don't try to open browser in headless CI environment
         if os.environ.get("CI") != "true":
@@ -376,17 +389,22 @@ def _run_pytest(test_dir: str, module_path: str | None, report_type: str, input_
                     webbrowser.open(html_index)
         
         if test_report:
-            # We already have data, but if users want the old report format:
             cmd_html = [sys.executable, "-m", "pytest", test_dir, "--html=test_report.html", "--self-contained-html"]
             subprocess.run(cmd_html, check=False, env=env)
             if os.environ.get("CI") != "true":
                 webbrowser.open(os.path.abspath("test_report.html"))
                 
+        # Exit with original pytest return code to properly signal CI
+        if result.returncode != 0 and result.returncode != 1: # 1 is often just 'tests failed', which is okay
+            pass 
+
     except Exception as e:
         if HAS_RICH:
-            console.print(f"[bold red]Error running pytest:[/bold red] {e}")
+            console.print(f"[bold red]Error during test execution/reporting:[/bold red] {e}")
         else:
-            print(f"Error running pytest: {e}")
+            print(f"Error during test execution/reporting: {e}")
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
