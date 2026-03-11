@@ -211,10 +211,11 @@ Các file demo được thiết kế để:
 
 Yêu cầu: **Python 3.10+**
 
-### Cách 1: Cài đặt để phát triển (Khuyên dùng)
+### Cách 1: Cài đặt chính thức (Khuyên dùng)
 ```bash
 git clone https://github.com/your-username/auto_test_gen_python.git
 cd auto_test_gen_python
+# Cài đặt và tự động tải mọi dependencies (pytest-html, json-report, rich,...)
 pip install .
 ```
 

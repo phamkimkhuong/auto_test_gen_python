@@ -14,6 +14,8 @@ dependencies = [
     "pytest-cov",
     "pytest-asyncio",
     "rich",
+    "pytest-html",
+    "pytest-json-report",
 ]
 
 [project.scripts]
