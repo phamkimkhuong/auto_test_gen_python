@@ -26,3 +26,5 @@ build/
 .installed.cfg
 *.egg
 MANIFEST
+report_data.json
+test_dashboard.html

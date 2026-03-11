@@ -110,31 +110,13 @@ def _values_for_str_branch(op: str, value: str, raise_when: str | None) -> Dict[
 def build_arg_strategy(arg_spec: Dict[str, Any], branches: List[Dict[str, Any]]) -> Dict[str, Any]:
     annotation = arg_spec.get("annotation", "Any")
     base_safe = _base_values(annotation, arg_spec.get("default"))
-    safe_values = list(base_safe)
+    
+    branch_truthy: List[Any] = []
+    branch_falsy: List[Any] = []
     raise_values: List[Any] = []
 
     norm = _normalize_annotation(annotation)
     relevant = [b for b in branches if b.get("arg") == arg_spec["name"]]
-
-    filtered_safe = []
-    for candidate in safe_values:
-        unsafe = False
-        for branch in relevant:
-            if branch.get("raise_when") == "truthy":
-                try:
-                    if _matches(candidate, branch["op"], branch["value"]):
-                        unsafe = True
-                except Exception:
-                    pass
-            elif branch.get("raise_when") == "falsy":
-                try:
-                    if not _matches(candidate, branch["op"], branch["value"]):
-                        unsafe = True
-                except Exception:
-                    pass
-        if not unsafe:
-            filtered_safe.append(candidate)
-    safe_values = filtered_safe
 
     for branch in relevant:
         value = branch.get("value")
@@ -143,36 +125,46 @@ def build_arg_strategy(arg_spec: Dict[str, Any], branches: List[Dict[str, Any]])
 
         if norm == "int" and isinstance(value, int) and not isinstance(value, bool):
             split = _values_for_int_branch(op, value, raise_when)
-            safe_values.extend(split["safe"])
-            raise_values.extend(split["raise"])
+            if raise_when is None:
+                # For non-raise branches, we want to hit both paths
+                truthy_map = {"Eq": [value], "NotEq": [value - 1, value + 1], "Lt": [value - 1], "LtE": [value], "Gt": [value + 1], "GtE": [value]}
+                branch_truthy.extend(truthy_map.get(op, [value]))
+                branch_falsy.extend(split["safe"])
+            else:
+                branch_falsy.extend(split["safe"])
+                raise_values.extend(split["raise"])
         elif norm == "str" and isinstance(value, str):
             split = _values_for_str_branch(op, value, raise_when)
-            safe_values.extend(split["safe"])
-            raise_values.extend(split["raise"])
-        elif norm == "bool" and isinstance(value, bool):
-            truthy = [value]
-            falsy = [not value]
-            if raise_when == "truthy":
-                safe_values.extend(falsy)
-                raise_values.extend(truthy)
-            elif raise_when == "falsy":
-                safe_values.extend(truthy)
-                raise_values.extend(falsy)
+            if raise_when is None:
+                branch_truthy.append(value)
+                branch_falsy.extend(split["safe"])
             else:
-                safe_values.extend(truthy + falsy)
+                branch_falsy.extend(split["safe"])
+                raise_values.extend(split["raise"])
+        elif norm == "bool" and isinstance(value, bool):
+            if raise_when == "truthy":
+                branch_falsy.append(not value)
+                raise_values.append(value)
+            elif raise_when == "falsy":
+                branch_falsy.append(value)
+                raise_values.append(not value)
+            else:
+                branch_truthy.append(value)
+                branch_falsy.append(not value)
 
-    safe_values = _dedupe(safe_values)
+    # Combine: Truthy (highest priority) -> Falsy -> Base Default
+    combined_safe = _dedupe(branch_truthy + branch_falsy + base_safe)
     raise_values = _dedupe(raise_values)
 
-    if any(b.get("raise_when") in {"truthy", "falsy"} for b in relevant):
-        safe_values = [v for v in safe_values if v not in raise_values]
+    # Filter out values that are known to raise
+    safe_values = [v for v in combined_safe if v not in raise_values]
 
     if not safe_values:
-        safe_values = _dedupe(_base_values(annotation, arg_spec.get("default")))
+        safe_values = base_safe
 
     smoke_value = safe_values[0] if safe_values else None
     return {
         "safe": safe_values,
         "raise": raise_values,
         "smoke": smoke_value,
-    }
+    }

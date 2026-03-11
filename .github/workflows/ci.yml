@@ -27,16 +27,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install .
 
-      - name: Auto-generate test files
+      - name: Auto-generate test files and run tests
         run: |
-          auto-test-gen demo_inputs --out tests_output --module demo_inputs
-
-      - name: Run Pytest with Coverage
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          # Generate XML for machines and HTML for humans
-          pytest tests_output/ --cov=demo_inputs --cov-report=term-missing --cov-report=xml --cov-report=html:htmlcov | tee coverage_output.txt
+          # The tool now handles PYTHONPATH automatically
+          auto-test-gen demo_inputs --run --report html
+          # We also run coverage manually for the CI summary output
+          pytest tests_output/ --cov=demo_inputs --cov-report=term-missing | tee coverage_output.txt
 
       - name: Generate Job Summary
         if: always()
@@ -47,12 +43,14 @@ jobs:
           sed -n '/Name *Stmts *Miss *Cover/,/TOTAL/p' coverage_output.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "> [!TIP]" >> $GITHUB_STEP_SUMMARY
-          echo "> To see **line-by-line details** (which lines are green/red), download the **html-coverage-report** from the Artifacts section below." >> $GITHUB_STEP_SUMMARY
+          echo "> [!IMPORTANT]  " >> $GITHUB_STEP_SUMMARY
+          echo "> Download **test-results-package** in the Artifacts section below to see the **Professional Test Dashboard** and line-by-line coverage details." >> $GITHUB_STEP_SUMMARY
 
-      - name: Upload reports
+      - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: html-coverage-report
-          path: htmlcov/
+          name: test-results-package
+          path: |
+            test_dashboard.html
+            htmlcov/

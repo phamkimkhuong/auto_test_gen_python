@@ -114,11 +114,11 @@ Sau khi chạy công cụ, kết quả mong đợi gồm:
 
 - **No AI / No LLM**
 - **AST-based static analysis**
-- **CLI tool đơn giản**
-- **Dry-run mode** để audit metadata trước khi sinh test
-- **Boundary-aware test generation**
-- **Skip an toàn khi không suy ra chắc chắn**
-- **Tích hợp `pytest`, `pytest-cov`, GitHub Actions**
+- **Rich CLI Interface**: Progress bar và bảng tổng kết trực quan.
+- **Smart Test Dashboard**: Tự động sinh báo cáo HTML chuyên nghiệp, phân loại test case theo file.
+- **Dry-run mode** để audit metadata trước khi sinh test.
+- **Boundary-aware test generation**.
+- **Tích hợp `pytest`, `pytest-cov`, GitHub Actions**.
 
 ---
 
@@ -229,12 +229,14 @@ Sau khi cài đặt bằng `pip install .`, bạn có thể dùng lệnh `auto-t
 
 ### 9.1. Lệnh cơ bản (Sinh test & Chạy ngay)
 ```bash
-auto-test-gen demo_inputs --out tests_output --module demo_inputs --run
+# Tự động quét demo_inputs, sinh test vào tests_output và thực thi
+auto-test-gen demo_inputs --run
 ```
 
-### 9.2. Xuất báo cáo HTML và Xem độ phủ
+### 9.2. Xuất báo cáo Dashboard & Coverage
 ```bash
-auto-test-gen demo_inputs --out tests_output --module demo_inputs --run --report html
+# Sinh dashboard HTML (test_dashboard.html) và báo cáo coverage
+auto-test-gen demo_inputs --run --report html
 ```
 
 ### 9.3. Lệnh dự phòng (Nếu không cài package)
@@ -291,7 +293,7 @@ def test_check_status_smoke():
     result = check_status(code)
     assert isinstance(result, str)
 
-@pytest.mark.parametrize('code', [0, 1, -1, 199, 200, 201, 403, 404, 405])
+@pytest.mark.parametrize('code', [0, 1, -1, 199, 200, 201], ids=['code=0', 'code=1', 'code=-1', 'code=199', 'code=200', 'code=201'])
 def test_check_status_boundary(code):
     result = check_status(code)
     assert isinstance(result, str)

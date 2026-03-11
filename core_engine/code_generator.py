@@ -260,7 +260,13 @@ def generate_test_file(
 
         if len(boundary_cases) > 1:
             serialized_cases = [tuple(case) if len(case) > 1 else case[0] for case in boundary_cases]
-            lines.append(f"@pytest.mark.parametrize('{param_names}', {serialized_cases!r})")
+            # Create clear IDs for reports: e.g. "code=200-status=ok"
+            def make_id(case):
+                c = case if isinstance(case, (tuple, list)) else [case]
+                return "-".join(f"{spec['name']}={val}" for spec, val in zip(args, c))
+            
+            case_ids = [make_id(c) for c in boundary_cases]
+            lines.append(f"@pytest.mark.parametrize('{param_names}', {serialized_cases!r}, ids={case_ids!r})")
             lines.extend(async_mark)
             lines.append(f"{def_prefix} test_{name}_boundary({param_names}):")
             lines.append(f"    result = {prefix}{call_expr}")
@@ -275,7 +281,12 @@ def generate_test_file(
         exc_name = _infer_exception_name(func)
         if raise_cases and exc_name:
             serialized_raise_cases = [tuple(case) if len(case) > 1 else case[0] for case in raise_cases]
-            lines.append(f"@pytest.mark.parametrize('{param_names}', {serialized_raise_cases!r})")
+            def make_id(case):
+                c = case if isinstance(case, (tuple, list)) else [case]
+                return "-".join(f"{spec['name']}={val}" for spec, val in zip(args, c))
+            
+            raise_ids = [make_id(c) for c in raise_cases]
+            lines.append(f"@pytest.mark.parametrize('{param_names}', {serialized_raise_cases!r}, ids={raise_ids!r})")
             lines.extend(async_mark)
             lines.append(f"{def_prefix} test_{name}_raises({param_names}):")
             lines.append(f"    with pytest.raises({exc_name}):")
