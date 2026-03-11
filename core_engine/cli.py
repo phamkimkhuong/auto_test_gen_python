@@ -202,16 +202,25 @@ def _generate_test_dashboard(json_path: str, output_path: str) -> None:
         files_map = {}
         for test in data.get('tests', []):
             nodeid = test.get('nodeid', '')
-            file_name = nodeid.split('::')[0]
-            if file_name not in files_map:
-                files_map[file_name] = {'tests': [], 'passed': 0, 'failed': 0, 'total': 0}
+            full_path = nodeid.split('::')[0]
+            # Pre-calculate display name to avoid backslash in f-string (Python < 3.12 compatibility)
+            display_name = full_path.replace('\\', '/').split('/')[-1]
             
-            files_map[file_name]['tests'].append(test)
-            files_map[file_name]['total'] += 1
+            if full_path not in files_map:
+                files_map[full_path] = {
+                    'tests': [], 
+                    'passed': 0, 
+                    'failed': 0, 
+                    'total': 0,
+                    'display_name': display_name
+                }
+            
+            files_map[full_path]['tests'].append(test)
+            files_map[full_path]['total'] += 1
             if test.get('outcome') == 'passed':
-                files_map[file_name]['passed'] += 1
+                files_map[full_path]['passed'] += 1
             else:
-                files_map[file_name]['failed'] += 1
+                files_map[full_path]['failed'] += 1
 
         summary = data.get('summary', {})
         total_passed = summary.get('passed', 0)
@@ -266,7 +275,7 @@ def _generate_test_dashboard(json_path: str, output_path: str) -> None:
         {"".join([f'''
         <div class="file-group">
             <div class="file-header" onclick="toggle('{i}')">
-                <span class="file-name">{fname.split('/')[-1].split('\\')[-1]}</span>
+                <span class="file-name">{fmeta['display_name']}</span>
                 <div class="file-stats">
                     <span class="badge pass">{fmeta['passed']} Passed</span>
                     {f'<span class="badge fail">{fmeta["failed"]} Failed</span>' if fmeta['failed'] > 0 else ''}
@@ -343,19 +352,23 @@ def _run_pytest(test_dir: str, module_path: str | None, report_type: str, input_
         if HAS_RICH:
             console.print(f"[bold cyan]Report generated:[/bold cyan] {dashboard_path}")
         
-        webbrowser.open(dashboard_path)
+        # Don't try to open browser in headless CI environment
+        if os.environ.get("CI") != "true":
+            webbrowser.open(dashboard_path)
 
         # Opening other reports if requested
         if report_type == "html":
             html_index = os.path.abspath("htmlcov/index.html")
             if os.path.exists(html_index):
-                webbrowser.open(html_index)
+                if os.environ.get("CI") != "true":
+                    webbrowser.open(html_index)
         
         if test_report:
             # We already have data, but if users want the old report format:
             cmd_html = [sys.executable, "-m", "pytest", test_dir, "--html=test_report.html", "--self-contained-html"]
             subprocess.run(cmd_html, check=False, env=env)
-            webbrowser.open(os.path.abspath("test_report.html"))
+            if os.environ.get("CI") != "true":
+                webbrowser.open(os.path.abspath("test_report.html"))
                 
     except Exception as e:
         if HAS_RICH:
@@ -363,6 +376,5 @@ def _run_pytest(test_dir: str, module_path: str | None, report_type: str, input_
         else:
             print(f"Error running pytest: {e}")
 
-
 if __name__ == "__main__":
-    main()
+    main()

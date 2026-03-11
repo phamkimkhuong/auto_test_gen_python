@@ -28,8 +28,10 @@ jobs:
           pip install .
 
       - name: Auto-generate test files and run tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
-          # The tool now handles PYTHONPATH automatically
+          # The tool now handles PYTHONPATH automatically, but we also set it here for the manual pytest call
           auto-test-gen demo_inputs --run --report html
           # We also run coverage manually for the CI summary output
           pytest tests_output/ --cov=demo_inputs --cov-report=term-missing | tee coverage_output.txt
@@ -37,11 +39,15 @@ jobs:
       - name: Generate Job Summary
         if: always()
         run: |
-          echo "### 📊 Test Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Coverage Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo '```text' >> $GITHUB_STEP_SUMMARY
-          sed -n '/Name *Stmts *Miss *Cover/,/TOTAL/p' coverage_output.txt >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          if [ -f coverage_output.txt ]; then
+            echo '```text' >> $GITHUB_STEP_SUMMARY
+            sed -n '/Name *Stmts *Miss *Cover/,/TOTAL/p' coverage_output.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Coverage output was not generated." >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "> [!IMPORTANT]  " >> $GITHUB_STEP_SUMMARY
           echo "> Download **test-results-package** in the Artifacts section below to see the **Professional Test Dashboard** and line-by-line coverage details." >> $GITHUB_STEP_SUMMARY
