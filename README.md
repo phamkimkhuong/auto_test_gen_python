@@ -326,34 +326,45 @@ jobs:
 
 ---
 
-## 13. Hạn chế của PoC
+## 13. Phân tích Hạn chế & Thách thức (Phản biện Kỹ thuật)
 
-Đây là một PoC mang tính nghiên cứu nên còn các giới hạn:
--  Chưa hỗ trợ toàn bộ pattern của Python AST.
--  Chưa sinh được assertion nghiệp vụ sâu.
--  Chưa thay thế được con người trong thiết kế test case phức tạp.
--  Chưa phù hợp cho production codebase lớn và nhiều side effects.
--  Chưa phải symbolic execution engine.
+Mặc dù PoC đã đạt được các mục tiêu cơ bản, nhưng từ góc độ nghiên cứu chuyên sâu, công cụ vẫn tồn tại các giới hạn đặc thù của phương pháp **AST-based Static Analysis**:
 
-Tuy nhiên, trong phạm vi đầu vào đã khóa, công cụ vẫn chứng minh được tính khả thi của hướng tiếp cận này.
+1.  **Độ sâu của Path Analysis**: Tool hệ thống chỉ nhận diện các hằng số (literals) xuất hiện trực tiếp trong câu lệnh `if`. Nó chưa thể "giải" được các biểu thức logic phức tạp hoặc các biến được tính toán qua nhiều bước trước khi so sánh.
+2.  **Vấn đề Oracle (Assertion)**: Hiện tại công cụ chỉ sinh các "Smoke Test" (kiểm tra khả năng thực thi) và kiểm tra kiểu dữ liệu trả về. Nó chưa thể tự suy luận logic nghiệp vụ để sinh các `assert` giá trị chi tiết (ví dụ: biết chắc chắn `add(2,3)` phải trả về `5` mà không cần chạy code).
+3.  **Path Explosion & Infeasible Paths**: Công cụ có thể sinh test cho các nhánh code không bao giờ thực thi được (ví dụ: `if x > 10: if x < 5:`) vì chưa có bộ máy giải quyết ràng buộc logic (Constraint Solver).
+4.  **Side Effects & Mocking**: Các hàm có tương tác với File System, Network hoặc Database chưa được hỗ trợ vì đòi hỏi cơ chế tự động sinh mã Mocking phức tạp.
 
 ---
 
-## 14. Kết luận
+## 14. Hướng phát triển (Future Work)
 
-Dự án này chứng minh rằng có thể xây dựng một công cụ tự động sinh unit test cơ bản cho Python bằng **static analysis trên AST**, trong phạm vi nhỏ, có kiểm soát, và không cần AI/LLM.
+Để nâng tầm công cụ từ một **Basic PoC** thành một **Advanced Testing Tool**, dự án có thể mở rộng theo các hướng sau:
 
-**Giá trị chính của đề tài:**
-1. Tạo ra một kiến trúc thử nghiệm có thể mở rộng.
-2. Chứng minh tính khả thi của hướng **AST-based test generation**.
-3. Làm nền cho các nghiên cứu sâu hơn về **path constraint solving** và **symbolic execution**.
+### A. Tích hợp Symbolic Execution & Z3 Solver
+Đây là hướng đi quan trọng nhất để giải quyết triệt để vấn đề **Path Coverage**:
+*   **Symbolic Execution**: Chuyển đổi mã nguồn sang dạng biểu thức ký hiệu (Symbolic expressions) thay vì giá trị cụ thể.
+*   **SMT Solving (Z3)**: Đẩy các ràng buộc đường đi (Path Constraints) vào trình giải toán **Z3 Solver** (Microsoft Research) để tìm ra bộ dữ liệu đầu vào (Input) chính xác cho những nhánh rẽ phức tạp nhất. Điều này đảm bảo tính **Soundness** (dữ liệu sinh ra chắc chắn thực thi được nhánh đó).
+
+### B. Tự động hóa Mocking (Auto-Mocking)
+Phân tích danh sách `import` và các lời gọi hàm ngoại vi để tự động sinh mã giả lập bằng thư viện `unittest.mock`, giúp kiểm thử được cả các tích hợp I/O.
+
+### C. Property-based Testing Integration
+Nghiên cứu tích hợp thư viện như **Hypothesis** để sinh các bộ dữ liệu kiểm thử dựa trên đặc tính (Properties) của dữ liệu thay vì chỉ dựa vào các giá trị biên cố định.
 
 ---
 
-## 15. Tài liệu tham khảo chính
+## 15. Kết luận
+
+Dự án này chứng minh rằng có thể xây dựng một công cụ tự động sinh unit test cơ bản cho Python bằng **static analysis trên AST**, trong phạm vi nhỏ, có kiểm soát, và không cần AI/LLM. 
+
+Mặc dù còn những giới hạn về độ sâu phân tích logic, nhưng kiến trúc hiện tại đã tạo ra một nền tảng (Foundation) vững chắc, mở ra hướng nghiên cứu kết hợp giữa **Phân tích cú pháp (AST)** và **Lý thuyết giải quyết ràng buộc (Formal Methods)** trong tương lai.
+
+---
+
+## 16. Tài liệu tham khảo chính
 
 - [Python ast documentation](https://docs.python.org/3/library/ast.html)
-- [Python argparse documentation](https://docs.python.org/3/library/argparse.html)
+- [Symbolic Execution for Software Testing](https://cacm.acm.org/magazines/2013/2/160161-symbolic-execution-for-software-testing/fulltext)
+- [Microsoft Z3 Solver Theorem Prover](https://github.com/Z3Prover/z3)
 - [pytest documentation](https://docs.pytest.org/)
-- [pytest-cov documentation](https://pytest-cov.readthedocs.io/)
-- [GitHub Actions Python testing guide](https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python)
