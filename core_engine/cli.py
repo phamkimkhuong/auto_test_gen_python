@@ -203,7 +203,7 @@ def _generate_test_dashboard(json_path: str, output_path: str) -> None:
         for test in data.get('tests', []):
             nodeid = test.get('nodeid', '')
             full_path = nodeid.split('::')[0]
-            # Pre-calculate display name to avoid backslash in f-string (Python < 3.12 compatibility)
+            # Pre-calculate display name to avoid backslash in f-string
             display_name = full_path.replace('\\', '/').split('/')[-1]
             
             if full_path not in files_map:
@@ -228,6 +228,48 @@ def _generate_test_dashboard(json_path: str, output_path: str) -> None:
         total_tests = summary.get('total', 0)
         duration = round(data.get('duration', 0), 2)
         
+        # Build file groups HTML iteratively for compatibility
+        file_groups_html = ""
+        for i, (fname, fmeta) in enumerate(files_map.items()):
+            test_rows = ""
+            for t in fmeta['tests']:
+                t_name = t.get('nodeid', '').split('::')[-1]
+                t_duration = round(t.get('duration', 0) * 1000, 1)
+                t_outcome = t.get('outcome', 'unknown')
+                outcome_class = "pass" if t_outcome == 'passed' else "fail"
+                
+                test_rows += f"""
+                        <tr>
+                            <td><code>{t_name}</code></td>
+                            <td style="text-align:right">{t_duration}ms</td>
+                            <td style="text-align:right">
+                                <span class="badge {outcome_class}" style="font-size: 10px">{t_outcome}</span>
+                            </td>
+                        </tr>"""
+
+            failed_badge = f'<span class="badge fail">{fmeta["failed"]} Failed</span>' if fmeta['failed'] > 0 else ''
+            
+            file_groups_html += f"""
+        <div class="file-group">
+            <div class="file-header" onclick="toggle('{i}')">
+                <span class="file-name">{fmeta['display_name']}</span>
+                <div class="file-stats">
+                    <span class="badge pass">{fmeta['passed']} Passed</span>
+                    {failed_badge}
+                </div>
+            </div>
+            <div class="details" id="details-{i}">
+                <table>
+                    <thead>
+                        <tr><th>Test Case (Parameters)</th><th style="text-align:right">Time</th><th style="text-align:right">Result</th></tr>
+                    </thead>
+                    <tbody>
+                        {test_rows}
+                    </tbody>
+                </table>
+            </div>
+        </div>"""
+
         # Simple, Clean HTML Template
         html_content = f"""
 <!DOCTYPE html>
@@ -272,37 +314,7 @@ def _generate_test_dashboard(json_path: str, output_path: str) -> None:
             <div class="stat-box"><div class="stat-label">Duration</div><div class="stat-value">{duration}s</div></div>
         </div>
 
-        {"".join([f'''
-        <div class="file-group">
-            <div class="file-header" onclick="toggle('{i}')">
-                <span class="file-name">{fmeta['display_name']}</span>
-                <div class="file-stats">
-                    <span class="badge pass">{fmeta['passed']} Passed</span>
-                    {f'<span class="badge fail">{fmeta["failed"]} Failed</span>' if fmeta['failed'] > 0 else ''}
-                </div>
-            </div>
-            <div class="details" id="details-{i}">
-                <table>
-                    <thead>
-                        <tr><th>Test Case (Parameters)</th><th style="text-align:right">Time</th><th style="text-align:right">Result</th></tr>
-                    </thead>
-                    <tbody>
-                        {"".join([f'''
-                        <tr>
-                            <td><code>{t.get('nodeid', '').split('::')[-1]}</code></td>
-                            <td style="text-align:right">{round(t.get('duration', 0)*1000, 1)}ms</td>
-                            <td style="text-align:right">
-                                <span class="badge {'pass' if t.get('outcome') == 'passed' else 'fail'}" style="font-size: 10px">
-                                    {t.get('outcome')}
-                                </span>
-                            </td>
-                        </tr>
-                        ''' for t in fmeta['tests']])}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        ''' for i, (fname, fmeta) in enumerate(files_map.items())])}
+        {file_groups_html}
     </div>
 
     <script>
